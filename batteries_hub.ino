@@ -36,6 +36,12 @@ uint32_t wifi_connection_timer, wifi_check_timer, wifi_request_timer;
 bool wifi_connected;
 uint32_t mqtt_reconnect_timer;
 
+bool auto_fans;
+uint8_t fan1=50;
+uint8_t fan2=50;
+
+const uint8_t fan1_pin=15;
+const uint8_t fan2_pin=16;
 
 double temps[5];
 double temp_delta=0;
@@ -44,9 +50,24 @@ int16_t send_counter=120;
 #define NORMAL_TEMP_PUSH_FREQ 1000 //ms
 #define MIN_TEMP_PUSH_FREQ 1000 //ms
 
+/*volatile uint32_t tach_pulses=0;
+
+void IRAM_ATTR tach_isr() 
+{ 
+  tach_pulses++; 
+}*/
+
 void setup()
 {
   Serial.begin(115200);
+
+  pinMode(fan1_pin, INPUT_PULLUP);
+  //attachInterrupt(digitalPinToInterrupt(fan1_pin), tach_isr, FALLING);
+  pinMode(fan2_pin, INPUT_PULLUP);
+  //attachInterrupt(digitalPinToInterrupt(fan2_pin), tach_isr, FALLING);
+
+  ledcAttach(fan1_pin, 25000, 8);
+  ledcAttach(fan2_pin, 25000, 8);
 
   ds.requestTemp();
 
@@ -85,6 +106,23 @@ void loop()
   }
 
   core0();
+  fans_processing();
+}
+
+void fans_processing()
+{
+  if(!auto_fans)
+  {
+    ledcWrite(fan1_pin, fan1);
+    ledcWrite(fan2_pin, fan2);
+
+    Serial.print("fan1=");
+    Serial.println(fan1);
+  }
+  else if(auto_fans)
+  {
+    ;
+  }
 }
 
 class Collector : public ghttp::HeadersCollector
@@ -182,7 +220,7 @@ void core0()
         //Text post_data="t1=16&t2=32&t3=64";
         Text headers="Content-Type: application/x-www-form-urlencoded\r\n";
 
-        http.request("/batteries_hub_temps.php", "POST", headers, send_build);
+        //http.request("/batteries_hub_temps.php", "POST", headers, send_build);
       }
 
       send_counter++;
@@ -204,20 +242,31 @@ void callback(char *topic, byte *message, unsigned int length)
   }
   Serial.println();
 
-  if(String(topic)=="ars-top-rx-strip_control-esp-alc")
+  if(String(topic)=="batteries_hub_settings")
   {
     if(mqtt.connected() && WiFi.status()==WL_CONNECTED && wifi_connected)
     {
       char send_build[35];
-      strcat(send_build, "&status=received");
-      mqtt.publish("strip_local_Ars", send_build);
+      strcat(send_build, "status=received");
+      mqtt.publish("batts_data", send_build);
     }
 
     gson::Parser p(20);
     int checksum=0;
     if (p.parse(message_tmp))
     {
-      String msg_type=p["type"];
+      uint8_t auto_fans_tmp;
+      auto_fans_tmp=p["auto_fans"];
+      auto_fans=auto_fans_tmp;
+      fan1=constrain(p["fan1"], 0, 255);
+      fan2=constrain(p["fan2"], 0, 255);
+
+      Serial.print("auto_fans=");
+      Serial.println(auto_fans);
+      Serial.print("fan1=");
+      Serial.println(fan1);
+      Serial.print("fan2=");
+      Serial.println(fan2);
     }
   }
 }
@@ -244,7 +293,7 @@ void reconnect()
       Serial.println("connected");
       Serial.print(mqtt.state());
       // Subscribe
-      mqtt.subscribe("ars-top-rx-strip_control-esp-alc");
+      mqtt.subscribe("batteries_hub_settings");
     }
     else
     {
