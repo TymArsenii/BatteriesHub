@@ -461,6 +461,17 @@ client.on('connect', () => //When connected
   {
     if (!err) 
     {
+      offline_timer=setTimeout(() => 
+      {
+        device_curr_state=0;
+
+        const is_dark_mode=window.matchMedia('(prefers-color-scheme:dark)').matches;
+
+        document.getElementById("device_state_img").style.display='flex';
+        document.getElementById("device_state_img").src="/image/offline_indicator.svg"; 
+        
+        document.getElementById('container').style.backgroundColor=is_dark_mode?'rgba(244, 171, 159, 0.6)':'rgba(244, 171, 159, 0.4)';
+      }, 3000);
       //console.log(`Subscribed to ${topic}`);
       console.log('subscribed');
     } 
